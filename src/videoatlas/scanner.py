@@ -44,8 +44,8 @@ def thumbnail(path, cache, modified=None):
 class Scanner(QObject):
     progress=Signal(int,str)
     finished=Signal(int,str)
-    def __init__(self, db_path, cache, folders):
-        super().__init__(); self.db_path=db_path; self.cache=Path(cache); self.folders=folders; self.cancelled=False
+    def __init__(self, db_path, cache, folders, recursive=True):
+        super().__init__(); self.db_path=db_path; self.cache=Path(cache); self.folders=folders; self.recursive=recursive; self.cancelled=False
     @Slot()
     def run(self):
         catalog=None; count=0; error=''
@@ -54,7 +54,9 @@ class Scanner(QObject):
             for folder in self.folders:
                 if self.cancelled: break
                 def onerror(err): self.progress.emit(count, f'Cannot read: {err.filename}')
-                for root, dirs, files in os.walk(folder, onerror=onerror):
+                for root, dirs, files in os.walk(folder, onerror=onerror, followlinks=False):
+                    if not self.recursive:
+                        dirs.clear()
                     if self.cancelled: break
                     for filename in files:
                         if self.cancelled: break
