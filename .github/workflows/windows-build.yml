@@ -1,0 +1,35 @@
+name: VideoAtlas Windows Build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download FFmpeg and FFprobe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force src/bin | Out-Null
+          Invoke-WebRequest https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip -OutFile "$env:RUNNER_TEMP/ffmpeg.zip"
+          Expand-Archive "$env:RUNNER_TEMP/ffmpeg.zip" "$env:RUNNER_TEMP/ffmpeg"
+          foreach ($n in @('ffmpeg.exe','ffprobe.exe')) { Copy-Item (Get-ChildItem "$env:RUNNER_TEMP/ffmpeg" -Recurse -Filter $n | Select-Object -First 1).FullName "src/bin/$n" }
+      - name: Install Inno Setup
+        run: choco install innosetup -y --no-progress
+      - name: Build and self-test
+        shell: cmd
+        run: call build_windows.bat
+      - name: Installer smoke test
+        shell: pwsh
+        run: ./windows_installer_smoke.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: VideoAtlas-v2.4-Windows
+          path: |
+            installer-output/VideoAtlas-Setup-2.4.0.exe
+            installer-output/installer-smoke-report.json
