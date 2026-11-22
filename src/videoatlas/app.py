@@ -372,7 +372,7 @@ class Window(QMainWindow):
         elif result: QMessageBox.information(self,'Analysis complete',result)
 
     def clear_analysis(self): self.analysis_thread=None;self.analysis_worker=None
-    def detect_selected_scenes(self):self.start_analysis('scenes')
+    def detect_selected_scenes(self):self.start_analysis('scenes',{'scene_cache':str(CACHE/'scenes')})
     def hash_selected(self):self.start_analysis('hash')
     def open_video_id(self, video_id, seconds=0):
         # Search by primary key rather than filename: duplicate names are common.
