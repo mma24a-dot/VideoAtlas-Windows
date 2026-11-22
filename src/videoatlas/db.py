@@ -270,12 +270,18 @@ class Catalog:
 
     def advanced_filter(self, *, term='', min_width=0, min_height=0, min_size=0,
                         max_size=None, codec='', min_duration=0, max_duration=None,
-                        offline_only=False, limit=150, offset=0):
+                        offline_only=False, limit=150, offset=0, extensions=None):
         #Consistent filters, including tags, before pagination.
 
         import os
         clauses=['v.width>=?', 'v.height>=?', 'v.size>=?', 'v.duration>=?']
         params=[min_width,min_height,min_size,min_duration]
+        if extensions is not None:
+            extensions=sorted(set(extensions))
+            if not extensions:
+                return []
+            clauses.append('('+' OR '.join('lower(v.path) LIKE ?' for _ in extensions)+')')
+            params.extend('%'+ext.lower() for ext in extensions)
         if max_size is not None:
             clauses.append('v.size<=?'); params.append(max_size)
         if max_duration is not None:
