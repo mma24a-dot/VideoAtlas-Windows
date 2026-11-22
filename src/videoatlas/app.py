@@ -63,8 +63,8 @@ class Window(QMainWindow):
             # Optional licensed Magnific PNG icons: assets/icons/<action-name>.png
             # Keep Qt native icons as an offline fallback if an asset is absent.
             slug=''.join(ch if ch.isalnum() else '-' for ch in label.lower()).strip('-')
-            from .deployment import resource_path
-            custom_icon=Path(resource_path('assets/icons/'+slug+'.png'))
+            from .deployment import application_root
+            custom_icon=application_root()/'assets'/'icons'/(slug+'.png')
             icon=QIcon(str(custom_icon)) if custom_icon.is_file() else self.style().standardIcon(icon_for(label))
             action=QAction(icon, label.upper(), self)
             action.setToolTip(tooltip or label)
