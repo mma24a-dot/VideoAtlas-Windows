@@ -44,6 +44,7 @@ class Window(QMainWindow):
             toolbar.setMovable(False)
             toolbar.setFloatable(False)
             toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+            toolbar.setIconSize(__import__('PySide6.QtCore',fromlist=['QSize']).QSize(18,18))
             toolbar.setStyleSheet('QToolBar QToolButton { padding: 4px 5px; font-size: 11px; font-weight: bold; }')
             self.addToolBar(Qt.TopToolBarArea, toolbar)
             toolbars.append(toolbar)
@@ -59,7 +60,13 @@ class Window(QMainWindow):
             return QStyle.SP_FileIcon
 
         def add_command(toolbar, label, handler, tooltip=None):
-            action=QAction(self.style().standardIcon(icon_for(label)), label.upper(), self)
+            # Optional licensed Magnific PNG icons: assets/icons/<action-name>.png
+            # Keep Qt native icons as an offline fallback if an asset is absent.
+            slug=''.join(ch if ch.isalnum() else '-' for ch in label.lower()).strip('-')
+            from .deployment import resource_path
+            custom_icon=Path(resource_path('assets/icons/'+slug+'.png'))
+            icon=QIcon(str(custom_icon)) if custom_icon.is_file() else self.style().standardIcon(icon_for(label))
+            action=QAction(icon, label.upper(), self)
             action.setToolTip(tooltip or label)
             action.triggered.connect(handler)
             toolbar.addAction(action)
