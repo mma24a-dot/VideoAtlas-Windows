@@ -179,6 +179,75 @@ class Window(QMainWindow):
         rv.addWidget(group,2); split.addWidget(right); split.setSizes([500,870])
         self.load_folders()
 
+    def selected_extensions(self):
+        return {ext for ext, box in self.extension_checks.items() if box.isChecked()}
+
+    def toggle_mute(self, muted):
+        self.audio.setMuted(muted)
+        self.mute_button.setText('UNMUTE' if muted else 'MUTE')
+
+    def find_duplicate_files(self):
+        if self.thread is not None:
+            QMessageBox.information(self, 'Busy', 'Wait for the scan to finish.')
+            return
+        if QMessageBox.question(self, 'Find identical videos', 'Compute SHA-256 for size-matched catalogued files? This may take a while. No files will be deleted.') != QMessageBox.Yes:
+            return
+        paths=[r['path'] for r in self.db.conn.execute('SELECT path FROM videos')]
+        from PySide6.QtWidgets import QProgressDialog
+        progress=QProgressDialog('Checking identical files...', '', 0, 0, self)
+        progress.setCancelButton(None)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.show()
+        QApplication.processEvents()
+        try:
+            groups=find_duplicates(paths)
+        except Exception as exc:
+            QMessageBox.warning(self, 'Duplicate search failed', str(exc))
+            return
+        finally:
+            progress.close()
+        if not groups:
+            QMessageBox.information(self, 'Duplicates', 'No SHA-256-identical available files found.')
+            return
+        dialog=QDialog(self)
+        dialog.setWindowTitle('Verified identical files')
+        dialog.resize(850, 550)
+        layout=QVBoxLayout(dialog)
+        details=QTextEdit()
+        details.setReadOnly(True)
+        details.setPlainText('\n\n'.join(str(len(g['paths']))+' files | SHA-256 '+g['sha256']+'\n'+'\n'.join(g['paths']) for g in groups))
+        layout.addWidget(details)
+        close=QPushButton('Close')
+        close.clicked.connect(dialog.accept)
+        layout.addWidget(close)
+        dialog.exec()
+
+    def move_named_files(self):
+        if self.thread is not None or self.analysis_thread is not None or self.batch_thread is not None:
+            QMessageBox.warning(self, 'Busy', 'Finish active scanning or analysis before moving files.')
+            return
+        needle,ok=QInputDialog.getText(self, 'Move matching files', 'Filename contains:')
+        if not ok or not needle.strip():
+            return
+        paths=[r['path'] for r in self.db.conn.execute('SELECT path FROM videos')]
+        matches=[p for p in paths if needle.strip().casefold() in Path(p).name.casefold() and Path(p).is_file()]
+        if not matches:
+            QMessageBox.information(self, 'Move files', 'No matching available catalogued files.')
+            return
+        destination=QFileDialog.getExistingDirectory(self, 'Select destination folder')
+        if not destination:
+            return
+        preview='\n'.join(matches[:10])
+        if QMessageBox.question(self, 'Confirm file move', 'Move '+str(len(matches))+' matching files to:\n'+destination+'\n\n'+preview+'\n\nExisting files will not be overwritten.') != QMessageBox.Yes:
+            return
+        self.player.stop()
+        moved,skipped=move_matching_files(matches, needle, destination)
+        with self.db.conn:
+            for source,target in moved:
+                self.db.conn.execute('UPDATE videos SET path=?,name=? WHERE path=?', (target,Path(target).name,source))
+        self.current=None
+        self.refresh()
+        QMessageBox.information(self, 'Move complete', 'Moved: '+str(len(moved))+'\nSkipped: '+str(len(skipped)))
     def manage_models(self):
         from .model_registry import load_registry, save_model, remove_model, check_registry
         dialog=QDialog(self); dialog.setWindowTitle('Local AI models — offline'); dialog.resize(680,320)
