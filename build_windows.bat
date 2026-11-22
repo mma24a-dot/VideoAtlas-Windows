@@ -15,7 +15,9 @@ if not exist "src\bin\ffprobe.exe" (
  echo ERROR: Missing src\bin\ffprobe.exe
  exit /b 1
 )
-python -m PyInstaller --noconfirm --clean --windowed --name VideoAtlas --paths src --collect-all PySide6 --add-binary "src\bin\ffmpeg.exe;bin" --add-binary "src\bin\ffprobe.exe;bin" run.py
+set "ICON_ASSETS="
+if exist "assets\icons" set "ICON_ASSETS=--add-data assets\icons;assets\icons"
+python -m PyInstaller --noconfirm --clean --windowed --name VideoAtlas --paths src --collect-all PySide6 --add-binary "src\bin\ffmpeg.exe;bin" --add-binary "src\bin\ffprobe.exe;bin" %ICON_ASSETS% run.py
 if errorlevel 1 exit /b 1
 python verify_windows_release.py dist\VideoAtlas --manifest dist\VideoAtlas\release-manifest.json
 if errorlevel 1 (
