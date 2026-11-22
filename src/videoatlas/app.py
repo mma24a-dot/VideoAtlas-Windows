@@ -55,6 +55,10 @@ class Window(QMainWindow):
         left=QWidget(); lv=QVBoxLayout(left); lv.addWidget(QLabel('LIBRARY FOLDERS'))
         self.folders=QListWidget(); self.folders.setMaximumHeight(230); lv.addWidget(self.folders)
         remove=QPushButton('Remove selected folder'); remove.clicked.connect(self.remove_folder); lv.addWidget(remove)
+        self.include_subfolders=QCheckBox('Include subfolders (recursive scan)')
+        self.include_subfolders.setChecked(True)
+        self.include_subfolders.setToolTip('Scan videos in the selected folder and every nested subfolder.')
+        lv.addWidget(self.include_subfolders)
         lv.addWidget(QLabel('SEARCH VIDEOS / TAGS'))
         self.search=QLineEdit(); self.search.setPlaceholderText('Filename, notes, path, tag…'); self.search.textChanged.connect(self.debounce_search); lv.addWidget(self.search)
         self.timer=QTimer(self); self.timer.setSingleShot(True); self.timer.setInterval(250); self.timer.timeout.connect(self.search_now)
@@ -163,12 +167,12 @@ class Window(QMainWindow):
         if self.thread is not None: return
         folders=[self.folders.item(i).text() for i in range(self.folders.count())]
         if not folders: QMessageBox.information(self,'VideoAtlas','Add a library folder first.'); return
-        self.thread=QThread(self); self.worker=Scanner(DB,CACHE,folders); self.worker.moveToThread(self.thread)
+        self.thread=QThread(self); self.worker=Scanner(DB,CACHE,folders,recursive=self.include_subfolders.isChecked()); self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run); self.worker.progress.connect(lambda n,s:self.statusBar().showMessage(f'Indexed {n} videos — {s}'))
         self.worker.finished.connect(self.scan_finished); self.worker.finished.connect(self.thread.quit)
         self.thread.finished.connect(self.worker.deleteLater); self.thread.finished.connect(self.thread.deleteLater)
         self.thread.finished.connect(self.clear_thread)
-        self.thread.start(); self.statusBar().showMessage('Scanning video folders in background…')
+        self.thread.start(); self.statusBar().showMessage('Scanning video folders and subfolders in background…' if self.include_subfolders.isChecked() else 'Scanning selected folders only…')
     def stop_scan(self):
         if self.worker: self.worker.cancelled=True
     def scan_finished(self,n,error):
