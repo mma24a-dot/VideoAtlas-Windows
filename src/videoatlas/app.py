@@ -3,14 +3,15 @@ import sys
 import subprocess
 from pathlib import Path
 from PySide6.QtCore import Qt, QThread, QUrl, QTimer
-from PySide6.QtGui import QAction, QIcon, QPixmap
+from PySide6.QtGui import QAction, QIcon, QPixmap, QStyle
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QSplitter,
  QLineEdit,QPushButton,QLabel,QListWidget,QListWidgetItem,QFileDialog,QTextEdit,QMessageBox,
  QComboBox,QFormLayout,QGroupBox,QScrollArea,QGridLayout,QFrame,QToolBar,QDialog,QInputDialog,QDialogButtonBox,QSpinBox,QCheckBox)
 from PySide6.QtMultimedia import QMediaPlayer,QAudioOutput
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from .db import Catalog
-from .scanner import Scanner, binary
+from .scanner import Scanner, binary, EXTENSIONS
+from .file_operations import find_duplicates, move_matching_files
 from .jobs import AnalysisJob
 from .batch import BatchWorker
 
@@ -42,13 +43,23 @@ class Window(QMainWindow):
             toolbar=QToolBar(title, self)
             toolbar.setMovable(False)
             toolbar.setFloatable(False)
-            toolbar.setToolButtonStyle(Qt.ToolButtonTextOnly)
-            toolbar.setStyleSheet('QToolBar QToolButton { padding: 4px 5px; font-size: 11px; }')
+            toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+            toolbar.setStyleSheet('QToolBar QToolButton { padding: 4px 5px; font-size: 11px; font-weight: bold; }')
             self.addToolBar(Qt.TopToolBarArea, toolbar)
             toolbars.append(toolbar)
 
+        def icon_for(label):
+            if 'folder' in label.lower() or 'collection' in label.lower() or 'move' in label.lower(): return QStyle.SP_DirIcon
+            if 'stop' in label.lower(): return QStyle.SP_MediaStop
+            if 'scan' in label.lower(): return QStyle.SP_BrowserReload
+            if 'scene' in label.lower() or 'run' in label.lower(): return QStyle.SP_MediaPlay
+            if 'backup' in label.lower() or 'export' in label.lower(): return QStyle.SP_DialogSaveButton
+            if 'duplicate' in label.lower() or 'dupe' in label.lower(): return QStyle.SP_MessageBoxWarning
+            if 'search' in label.lower() or 'gallery' in label.lower(): return QStyle.SP_FileDialogContentsView
+            return QStyle.SP_FileIcon
+
         def add_command(toolbar, label, handler, tooltip=None):
-            action=QAction(label, self)
+            action=QAction(self.style().standardIcon(icon_for(label)), label.upper(), self)
             action.setToolTip(tooltip or label)
             action.triggered.connect(handler)
             toolbar.addAction(action)
@@ -65,6 +76,7 @@ class Window(QMainWindow):
             ('Contact sheet', self.make_contact_sheet, None),
             ('SHA-256', self.hash_selected, None),
             ('Duplicates', self.show_verified_duplicates, 'Verified duplicates'),
+            ('Find duplicates', self.find_duplicate_files, 'SHA-256 identical file search'),
         ]:
             add_command(library, label, handler, tooltip)
 
@@ -84,6 +96,7 @@ class Window(QMainWindow):
 
         for label, handler, tooltip in [
             ('Possible dupes', self.show_duplicates, 'Possible duplicates'),
+            ('Move files', self.move_named_files, 'Move files matching filename'),
             ('Backup', self.backup_catalog, 'Backup catalog'),
             ('Export', self.export_library_package, 'Export library package'),
             ('Validate', self.validate_backup_package, 'Validate backup package'),
@@ -109,6 +122,15 @@ class Window(QMainWindow):
         self.include_subfolders.setChecked(True)
         self.include_subfolders.setToolTip('Scan videos in the selected folder and every nested subfolder.')
         lv.addWidget(self.include_subfolders)
+        lv.addWidget(QLabel('FILE TYPES — CHECK TO INCLUDE'))
+        type_grid=QGridLayout()
+        self.extension_checks={}
+        for index,ext in enumerate(sorted(EXTENSIONS)):
+            check=QCheckBox(ext.upper());check.setChecked(True)
+            check.toggled.connect(lambda _:self.apply_filters())
+            self.extension_checks[ext]=check
+            type_grid.addWidget(check,index//5,index%5)
+        lv.addLayout(type_grid)
         lv.addWidget(QLabel('SEARCH VIDEOS / TAGS'))
         self.search=QLineEdit(); self.search.setPlaceholderText('Filename, notes, path, tag…'); self.search.textChanged.connect(self.debounce_search); lv.addWidget(self.search)
         self.timer=QTimer(self); self.timer.setSingleShot(True); self.timer.setInterval(250); self.timer.timeout.connect(self.search_now)
@@ -142,7 +164,9 @@ class Window(QMainWindow):
         self.video=QVideoWidget(); self.video.setMinimumHeight(280); self.player.setVideoOutput(self.video); rv.addWidget(self.video,3)
         playback=QHBoxLayout(); play=QPushButton('▶ Play'); pause=QPushButton('Ⅱ Pause'); openfile=QPushButton('Open externally')
         play.clicked.connect(self.player.play); pause.clicked.connect(self.player.pause); openfile.clicked.connect(self.open_external)
-        for b in (play,pause,openfile): playback.addWidget(b)
+        self.mute_button=QPushButton('MUTE');self.mute_button.setCheckable(True)
+        self.mute_button.toggled.connect(self.toggle_mute)
+        for b in (play,pause,self.mute_button,openfile): playback.addWidget(b)
         rv.addLayout(playback)
         from PySide6.QtWidgets import QSlider
         self.seek=QSlider(Qt.Horizontal); self.seek.setRange(0,1000); self.seek.sliderMoved.connect(self.seek_to)
@@ -217,7 +241,7 @@ class Window(QMainWindow):
         if self.thread is not None: return
         folders=[self.folders.item(i).text() for i in range(self.folders.count())]
         if not folders: QMessageBox.information(self,'VideoAtlas','Add a library folder first.'); return
-        self.thread=QThread(self); self.worker=Scanner(DB,CACHE,folders,recursive=self.include_subfolders.isChecked()); self.worker.moveToThread(self.thread)
+        self.thread=QThread(self); self.worker=Scanner(DB,CACHE,folders,recursive=self.include_subfolders.isChecked(),extensions=self.selected_extensions()); self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.run); self.worker.progress.connect(lambda n,s:self.statusBar().showMessage(f'Indexed {n} videos — {s}'))
         self.worker.finished.connect(self.scan_finished); self.worker.finished.connect(self.thread.quit)
         self.thread.finished.connect(self.worker.deleteLater); self.thread.finished.connect(self.thread.deleteLater)
@@ -240,6 +264,7 @@ class Window(QMainWindow):
             min_height=self.min_height.value(),min_size=self.min_size.value()*1048576,
             codec=self.codec_filter.text(),min_duration=self.min_duration.value()*60,
             offline_only=self.offline_only.isChecked(),limit=150,offset=self.page*150)
+        rows=[r for r in rows if Path(r['path']).suffix.lower() in self.selected_extensions()]
         for row in rows:
             duration=int(row['duration'] or 0); label=f"{row['name']}\n{duration//60}:{duration%60:02d}  ·  {row['size']/1048576:.1f} MB  ·  {row['tags']}"
             item=QListWidgetItem(label); item.setData(Qt.UserRole,dict(row))
