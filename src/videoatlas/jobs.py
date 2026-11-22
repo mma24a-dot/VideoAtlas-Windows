@@ -1,7 +1,8 @@
+import hashlib
 from pathlib import Path
 from PySide6.QtCore import QObject,Signal,Slot
 from .db import Catalog
-from .analysis import sha256_file,detect_scenes,contact_sheet,transcribe_whisper,ocr_frame
+from .analysis import sha256_file,detect_scenes,contact_sheet,transcribe_whisper,ocr_frame,frame
 
 class AnalysisJob(QObject):
     finished=Signal(str,str)
@@ -15,7 +16,24 @@ class AnalysisJob(QObject):
             if not Path(path).is_file(): raise RuntimeError('Video is offline or missing')
             db=Catalog(self.db_path);db.initialize_analysis()
             if self.kind=='scenes':
-                times=detect_scenes(path);db.replace_scenes(vid,times);result=f'Detected {len(times)} scene changes'
+                times=detect_scenes(path)
+                cache=Path(self.options.get('scene_cache') or Path.home()/'.videoatlas-scene-cache')
+                cache.mkdir(parents=True, exist_ok=True)
+                scenes=[]
+                failed=0
+                for seconds in times:
+                    key=hashlib.sha256(f'{path}|{self.video.get("modified", "")}|{seconds}'.encode('utf-8')).hexdigest()
+                    thumbnail=cache/(key+'.jpg')
+                    if not thumbnail.is_file() or thumbnail.stat().st_size==0:
+                        try:
+                            frame(path, seconds, thumbnail, 320)
+                        except Exception:
+                            failed+=1
+                            thumbnail=None
+                    scenes.append((seconds,str(thumbnail) if thumbnail and thumbnail.is_file() else ''))
+                db.replace_scenes_with_thumbnails(vid,scenes)
+                result=f'Detected {len(times)} scene changes; generated {len(times)-failed} thumbnails'
+                if failed: result+=f' ({failed} frames could not be extracted)'
             elif self.kind=='hash':
                 digest=sha256_file(path);db.save_hash(vid,path,digest);result=f'SHA-256: {digest}'
             elif self.kind=='contact':
