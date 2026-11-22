@@ -44,8 +44,8 @@ def thumbnail(path, cache, modified=None):
 class Scanner(QObject):
     progress=Signal(int,str)
     finished=Signal(int,str)
-    def __init__(self, db_path, cache, folders, recursive=True):
-        super().__init__(); self.db_path=db_path; self.cache=Path(cache); self.folders=folders; self.recursive=recursive; self.cancelled=False
+    def __init__(self, db_path, cache, folders, recursive=True, extensions=None):
+        super().__init__(); self.db_path=db_path; self.cache=Path(cache); self.folders=folders; self.recursive=recursive; self.extensions=set(EXTENSIONS if extensions is None else extensions); self.cancelled=False
     @Slot()
     def run(self):
         catalog=None; count=0; error=''
@@ -61,7 +61,7 @@ class Scanner(QObject):
                     for filename in files:
                         if self.cancelled: break
                         path=Path(root)/filename
-                        if path.suffix.lower() not in EXTENSIONS: continue
+                        if path.suffix.lower() not in self.extensions: continue
                         try:
                             stat=path.stat()
                             old=catalog.existing(path)
