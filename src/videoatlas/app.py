@@ -339,8 +339,7 @@ class Window(QMainWindow):
         rows=self.db.advanced_filter(term=self.term,min_width=self.min_width.value(),
             min_height=self.min_height.value(),min_size=self.min_size.value()*1048576,
             codec=self.codec_filter.text(),min_duration=self.min_duration.value()*60,
-            offline_only=self.offline_only.isChecked(),limit=150,offset=self.page*150)
-        rows=[r for r in rows if Path(r['path']).suffix.lower() in self.selected_extensions()]
+            offline_only=self.offline_only.isChecked(),limit=150,offset=self.page*150,extensions=self.selected_extensions())
         for row in rows:
             duration=int(row['duration'] or 0); label=f"{row['name']}\n{duration//60}:{duration%60:02d}  ·  {row['size']/1048576:.1f} MB  ·  {row['tags']}"
             item=QListWidgetItem(label); item.setData(Qt.UserRole,dict(row))
