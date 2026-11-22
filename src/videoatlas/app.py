@@ -33,23 +33,73 @@ class Window(QMainWindow):
         self.setup_ui(); self.set_theme('Dark'); self.refresh()
 
     def setup_ui(self):
-        bar=QToolBar('Library'); self.addToolBar(bar)
-        add=QAction('Add folder',self); add.triggered.connect(self.add_folder); bar.addAction(add)
-        rescan=QAction('Rescan folders',self); rescan.triggered.connect(self.scan_folders); bar.addAction(rescan)
-        stop=QAction('Stop scan',self); stop.triggered.connect(self.stop_scan); bar.addAction(stop)
-        bar.addSeparator(); bar.addWidget(QLabel(' Theme: '))
-        self.theme=QComboBox(); self.theme.addItems(['Dark','Light']); self.theme.currentTextChanged.connect(self.set_theme); bar.addWidget(self.theme)
-        bar.addSeparator()
-        for title,handler in [('Detect scenes',self.detect_selected_scenes),('Scene timeline',self.scene_timeline),('Scene gallery',self.scene_gallery),('Contact sheet',self.make_contact_sheet),('SHA-256',self.hash_selected),('Verified duplicates',self.show_verified_duplicates),('Transcribe audio',self.transcribe_selected),('OCR current frame',self.ocr_selected),('AI text search',self.search_ai),('Visual semantic search',self.semantic_search),('Add to collection',self.add_collection),('View collection',self.view_collection)]:
-            action=QAction(title,self);action.triggered.connect(handler);bar.addAction(action)
-        bar.addSeparator()
-        for title,handler in [('Queue batch analysis',self.queue_batch),('Run queued jobs',self.run_batch),('Stop batch',self.stop_batch),('Queue status',self.show_queue)]:
-            action=QAction(title,self); action.triggered.connect(handler); bar.addAction(action)
-        bar.addSeparator(); duplicates=QAction('Possible duplicates',self); duplicates.triggered.connect(self.show_duplicates); bar.addAction(duplicates)
-        for title, handler in [('Backup catalog', self.backup_catalog), ('Export library package', self.export_library_package), ('Validate backup package', self.validate_backup_package), ('Restore to new folder', self.restore_library_gui), ('Database health', self.check_database), ('Duplicate details', self.duplicate_details)]:
-            action=QAction(title,self); action.triggered.connect(handler); bar.addAction(action)
-        check=QAction('Offline readiness',self); check.triggered.connect(self.offline_readiness); bar.addAction(check)
-        models=QAction('Local AI models',self); models.triggered.connect(self.manage_models); bar.addAction(models)
+        # Three dedicated toolbar rows keep the primary commands visible instead of
+        # packing every action into a single overflowing toolbar.
+        toolbars=[]
+        for title in ('Library and video tools', 'Analysis and batch tools', 'Catalog and settings'):
+            if toolbars:
+                self.addToolBarBreak(Qt.TopToolBarArea)
+            toolbar=QToolBar(title, self)
+            toolbar.setMovable(False)
+            toolbar.setFloatable(False)
+            toolbar.setToolButtonStyle(Qt.ToolButtonTextOnly)
+            toolbar.setStyleSheet('QToolBar QToolButton { padding: 4px 5px; font-size: 11px; }')
+            self.addToolBar(Qt.TopToolBarArea, toolbar)
+            toolbars.append(toolbar)
+
+        def add_command(toolbar, label, handler, tooltip=None):
+            action=QAction(label, self)
+            action.setToolTip(tooltip or label)
+            action.triggered.connect(handler)
+            toolbar.addAction(action)
+            return action
+
+        library, analysis, catalog_tools = toolbars
+        for label, handler, tooltip in [
+            ('Add folder', self.add_folder, None),
+            ('Rescan', self.scan_folders, 'Rescan folders'),
+            ('Stop scan', self.stop_scan, None),
+            ('Scenes', self.detect_selected_scenes, 'Detect scenes'),
+            ('Timeline', self.scene_timeline, 'Scene timeline'),
+            ('Gallery', self.scene_gallery, 'Scene gallery'),
+            ('Contact sheet', self.make_contact_sheet, None),
+            ('SHA-256', self.hash_selected, None),
+            ('Duplicates', self.show_verified_duplicates, 'Verified duplicates'),
+        ]:
+            add_command(library, label, handler, tooltip)
+
+        for label, handler, tooltip in [
+            ('Transcribe', self.transcribe_selected, 'Transcribe audio'),
+            ('OCR frame', self.ocr_selected, 'OCR current frame'),
+            ('AI search', self.search_ai, 'AI text search'),
+            ('Visual search', self.semantic_search, 'Visual semantic search'),
+            ('Add collection', self.add_collection, 'Add to collection'),
+            ('View collection', self.view_collection, None),
+            ('Queue batch', self.queue_batch, 'Queue batch analysis'),
+            ('Run jobs', self.run_batch, 'Run queued jobs'),
+            ('Stop batch', self.stop_batch, None),
+            ('Queue status', self.show_queue, None),
+        ]:
+            add_command(analysis, label, handler, tooltip)
+
+        for label, handler, tooltip in [
+            ('Possible dupes', self.show_duplicates, 'Possible duplicates'),
+            ('Backup', self.backup_catalog, 'Backup catalog'),
+            ('Export', self.export_library_package, 'Export library package'),
+            ('Validate', self.validate_backup_package, 'Validate backup package'),
+            ('Restore', self.restore_library_gui, 'Restore to new folder'),
+            ('DB health', self.check_database, 'Database health'),
+            ('Dupe details', self.duplicate_details, 'Duplicate details'),
+            ('Offline status', self.offline_readiness, 'Offline readiness'),
+            ('AI models', self.manage_models, 'Local AI models'),
+        ]:
+            add_command(catalog_tools, label, handler, tooltip)
+        catalog_tools.addSeparator()
+        catalog_tools.addWidget(QLabel(' Theme: '))
+        self.theme=QComboBox()
+        self.theme.addItems(['Dark','Light'])
+        self.theme.currentTextChanged.connect(self.set_theme)
+        catalog_tools.addWidget(self.theme)
         self.statusBar().showMessage('Ready — all catalog data remains on this computer')
         split=QSplitter(Qt.Horizontal); self.setCentralWidget(split)
         left=QWidget(); lv=QVBoxLayout(left); lv.addWidget(QLabel('LIBRARY FOLDERS'))
