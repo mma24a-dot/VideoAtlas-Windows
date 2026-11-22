@@ -3,10 +3,10 @@ import sys
 import subprocess
 from pathlib import Path
 from PySide6.QtCore import Qt, QThread, QUrl, QTimer
-from PySide6.QtGui import QAction, QIcon, QPixmap, QStyle
+from PySide6.QtGui import QAction, QIcon, QPixmap
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QSplitter,
  QLineEdit,QPushButton,QLabel,QListWidget,QListWidgetItem,QFileDialog,QTextEdit,QMessageBox,
- QComboBox,QFormLayout,QGroupBox,QScrollArea,QGridLayout,QFrame,QToolBar,QDialog,QInputDialog,QDialogButtonBox,QSpinBox,QCheckBox)
+ QComboBox,QFormLayout,QGroupBox,QScrollArea,QGridLayout,QFrame,QToolBar,QDialog,QInputDialog,QDialogButtonBox,QSpinBox,QCheckBox,QStyle)
 from PySide6.QtMultimedia import QMediaPlayer,QAudioOutput
 from PySide6.QtMultimediaWidgets import QVideoWidget
 from .db import Catalog
