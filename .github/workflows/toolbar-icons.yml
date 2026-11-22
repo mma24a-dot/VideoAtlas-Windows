@@ -1,0 +1,37 @@
+name: Download and package toolbar icons
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - package_toolbar_icons.py
+      - .github/workflows/toolbar-icons.yml
+permissions:
+  contents: write
+jobs:
+  icons:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Download official Tabler PNG icon package
+        run: npm install --no-save --ignore-scripts @tabler/icons-png@3.50.0
+      - name: Generate PNG assets and ZIP
+        run: python package_toolbar_icons.py
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VideoAtlas-Toolbar-Icons
+          path: VideoAtlas-Toolbar-Icons.zip
+      - name: Commit PNG assets and ZIP to repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/icons/*.png assets/icons/TABLER-LICENSE.txt VideoAtlas-Toolbar-Icons.zip
+          git diff --cached --quiet || (git commit -m "Add MIT-licensed Tabler PNG toolbar icon pack" && git push)
